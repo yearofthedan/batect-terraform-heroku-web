@@ -1,16 +1,6 @@
-project_name: batect-cypress
+project_name: terraform-batect-heroku
 
 containers:
-  app:
-    build_directory: .
-    volumes:
-      - local: .
-        container: /app
-        options: cached
-    working_directory: /app
-    environment:
-      PORT: 8352
-
   heroku:
     build_directory: ./heroku
     volumes:
@@ -19,34 +9,85 @@ containers:
         options: cached
     working_directory: /heroku
     environment:
-      HEROKU_API_KEY: ${HEROKU_API_KEY}
       APP_NAME: ${APP_NAME}
+      HEROKU_API_KEY: ${HEROKU_API_KEY}
 
   terraform:
     build_directory: ./terraform
     volumes:
-      - local: ./terraform
-        container: /terraform
+      - local: .
+        container: /app
         options: cached
-    working_directory: /terraform
+    working_directory: /app/terraform
     environment:
-      TERRAFORM_STATE_DB_URL: ${TERRAFORM_STATE_DB_URL}
+      APP_NAME: ${APP_NAME}
+      HEROKU_API_KEY: ${HEROKU_API_KEY}
+      TERRAFORM_REMOTE_DB_URL: ${TERRAFORM_REMOTE_DB_URL}
+
+  docker-push-env:
+    build_directory: .
+    dockerfile: Dockerfile-buildPublishEnv
+    volumes:
+      - local: .
+        container: /code
+        options: cached
+      - local: /var/run/docker.sock
+        container: /var/run/docker.sock
+    working_directory: /code
+    environment:
+      APP_NAME: ${APP_NAME}
+      HEROKU_API_KEY: ${HEROKU_API_KEY}
 
 tasks:
-  create-app:
-    description: Setup a project in heroku
+  setup-terraform-remote:
+    group: Terraform Infra
+    description: Setup an app in heroku for storing remote terraform state
     run:
       container: heroku
-      command: sh -c 'heroku create --app "$APP_NAME" && heroku addons:create heroku-postgresql:hobby-dev --app "$APP_NAME"'
+      command: sh -c './setupTerraformRemoteStorage.sh'
 
   get-database-url:
+    group: Terraform Infra
     description: Get the database url
     run:
       container: heroku
-      command: sh -c 'heroku config:get DATABASE_URL --app "$APP_NAME"'
+      command: sh -c './getTerraformRemoteConnectionUrl.sh'
 
-  init-terraform:
+  init-terraform-with-remote:
+    group: Infra
     description: Init terraform
     run:
       container: terraform
-      command: sh -c 'terraform init -backend-config="conn_str=$TERRAFORM_STATE_DB_URL"'
+      command: sh -c './initialiseTerraform.sh'
+
+  plan-web-infra:
+    group: Infra
+    description: Plan for creating the infra for the web app
+    prerequisites:
+      - init-terraform-with-remote
+    run:
+      container: terraform
+      command: sh -c 'terraform plan -var web_app_name="$APP_NAME-web" -out=current.tfplan'
+
+  apply-web-infra:
+    group: Infra
+    description: Create the infra for the web app
+    prerequisites:
+      - init-terraform-with-remote
+    run:
+      container: terraform
+      command: sh -c 'terraform apply current.tfplan'
+
+  destroy-web-infra:
+    group: Infra
+    description: Remove the infra for the web app
+    run:
+      container: terraform
+      command: sh -c 'terraform destroy -var web_app_name="$APP_NAME-web"'
+
+  push-image:
+    description: Build and push the image to Heroku.
+    group: Deploy
+    run:
+      container: docker-push-env
+      command: ./buildAndPushImage.sh
