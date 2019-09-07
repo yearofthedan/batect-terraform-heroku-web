@@ -1,6 +1,14 @@
 project_name: terraform-batect-heroku
 
 containers:
+  build-env:
+    image: node:12.10.0-alpine
+    volumes:
+      - local: ./app
+        container: /app
+        options: cached
+    working_directory: /app
+
   heroku:
     build_directory: ./heroku
     volumes:
@@ -86,8 +94,15 @@ tasks:
       container: terraform
       command: sh -c 'terraform destroy -var web_app_name="$WEB_APP"'
 
+  build:
+    description: Build the web assets
+    group: Deploy
+    run:
+      container: build-env
+      command: sh -c 'yarn && yarn build'
+
   push-image:
-    description: Build and push the image to Heroku.
+    description: Dockerise and push the image to Heroku.
     group: Deploy
     run:
       container: docker-push-env
