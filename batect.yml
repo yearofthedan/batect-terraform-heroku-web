@@ -1,0 +1,52 @@
+project_name: batect-cypress
+
+containers:
+  app:
+    build_directory: .
+    volumes:
+      - local: .
+        container: /app
+        options: cached
+    working_directory: /app
+    environment:
+      PORT: 8352
+
+  heroku:
+    build_directory: ./heroku
+    volumes:
+      - local: ./heroku
+        container: /heroku
+        options: cached
+    working_directory: /heroku
+    environment:
+      HEROKU_API_KEY: ${HEROKU_API_KEY}
+      APP_NAME: ${APP_NAME}
+
+  terraform:
+    build_directory: ./terraform
+    volumes:
+      - local: ./terraform
+        container: /terraform
+        options: cached
+    working_directory: /terraform
+    environment:
+      TERRAFORM_STATE_DB_URL: ${TERRAFORM_STATE_DB_URL}
+
+tasks:
+  create-app:
+    description: Setup a project in heroku
+    run:
+      container: heroku
+      command: sh -c 'heroku create --app "$APP_NAME" && heroku addons:create heroku-postgresql:hobby-dev --app "$APP_NAME"'
+
+  get-database-url:
+    description: Get the database url
+    run:
+      container: heroku
+      command: sh -c 'heroku config:get DATABASE_URL --app "$APP_NAME"'
+
+  init-terraform:
+    description: Init terraform
+    run:
+      container: terraform
+      command: sh -c 'terraform init -backend-config="conn_str=$TERRAFORM_STATE_DB_URL"'
