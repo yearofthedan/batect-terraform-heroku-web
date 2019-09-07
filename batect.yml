@@ -9,6 +9,7 @@ containers:
         options: cached
     working_directory: /heroku
     environment:
+      WEB_APP: ${WEB_APP}
       TERRAFORM_STATE_APP: ${TERRAFORM_STATE_APP}
       HEROKU_API_KEY: ${HEROKU_API_KEY}
 
@@ -28,14 +29,12 @@ containers:
     build_directory: .
     dockerfile: ./deploy/Dockerfile
     volumes:
-      - local: ./deploy
-        container: /deploy
-        options: cached
-      - local: ./app
-        container: /app
+      - local: .
+        container: /code
         options: cached
       - local: /var/run/docker.sock
         container: /var/run/docker.sock
+    working_directory: /code
     environment:
       WEB_APP: ${WEB_APP}
       HEROKU_API_KEY: ${HEROKU_API_KEY}
