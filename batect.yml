@@ -9,7 +9,7 @@ containers:
         options: cached
     working_directory: /heroku
     environment:
-      APP_NAME: ${APP_NAME}
+      TERRAFORM_STATE_APP: ${TERRAFORM_STATE_APP}
       HEROKU_API_KEY: ${HEROKU_API_KEY}
 
   terraform:
@@ -20,22 +20,24 @@ containers:
         options: cached
     working_directory: /app/terraform
     environment:
-      APP_NAME: ${APP_NAME}
+      WEB_APP: ${WEB_APP}
       HEROKU_API_KEY: ${HEROKU_API_KEY}
       TERRAFORM_REMOTE_DB_URL: ${TERRAFORM_REMOTE_DB_URL}
 
   docker-push-env:
     build_directory: .
-    dockerfile: Dockerfile-buildPublishEnv
+    dockerfile: ./deploy/Dockerfile
     volumes:
-      - local: .
-        container: /code
+      - local: ./deploy
+        container: /deploy
+        options: cached
+      - local: ./app
+        container: /app
         options: cached
       - local: /var/run/docker.sock
         container: /var/run/docker.sock
-    working_directory: /code
     environment:
-      APP_NAME: ${APP_NAME}
+      WEB_APP: ${WEB_APP}
       HEROKU_API_KEY: ${HEROKU_API_KEY}
 
 tasks:
@@ -67,7 +69,7 @@ tasks:
       - init-terraform-with-remote
     run:
       container: terraform
-      command: sh -c 'terraform plan -var web_app_name="$APP_NAME-web" -out=current.tfplan'
+      command: sh -c 'terraform plan -var web_app_name="$WEB_APP" -out=current.tfplan'
 
   apply-web-infra:
     group: Infra
@@ -83,11 +85,18 @@ tasks:
     description: Remove the infra for the web app
     run:
       container: terraform
-      command: sh -c 'terraform destroy -var web_app_name="$APP_NAME-web"'
+      command: sh -c 'terraform destroy -var web_app_name="$WEB_APP"'
 
   push-image:
     description: Build and push the image to Heroku.
     group: Deploy
     run:
       container: docker-push-env
-      command: ./buildAndPushImage.sh
+      command: ./deploy/buildAndPushImage.sh
+
+  deploy:
+    description: Tell heroku to deploy the new version
+    group: Deploy
+    run:
+      container: heroku
+      command: sh -c 'heroku container:release --app "$WEB_APP" web'

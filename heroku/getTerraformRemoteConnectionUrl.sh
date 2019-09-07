@@ -1,3 +1,3 @@
 #! /usr/bin/env sh
 
-heroku config:get DATABASE_URL --app "$APP_NAME-tstate"
+heroku config:get DATABASE_URL --app "$TERRAFORM_STATE_APP"
