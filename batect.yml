@@ -62,6 +62,10 @@ containers:
       - local: ./app
         container: /app
         options: cached
+    environment:
+      PORT: "4567"
+    ports:
+      - 4567:4567
 
   express-backend:
     build_directory: ./server
@@ -71,6 +75,11 @@ containers:
         container: /code
         options: cached
     working_directory: /code
+    environment:
+      PORT: "3000"
+    ports:
+     - 3000:3000
+
 
 tasks:
   setup-terraform-remote:
@@ -152,13 +161,10 @@ tasks:
     group: Local
     prerequisites:
       - build-client-app
+    dependencies:
+      - express-backend
     run:
       container: nginx-serving-assets
-      environment:
-        PORT: "4567"
-      ports:
-        - local: 4567
-          container: 4567
 
   local-server:
     description: Start just the backend
@@ -167,8 +173,3 @@ tasks:
       - build-server
     run:
      container: express-backend
-     environment:
-       PORT: "3000"
-     ports:
-       - local: 3000
-         container: 3000
