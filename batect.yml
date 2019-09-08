@@ -1,13 +1,21 @@
 project_name: terraform-batect-heroku
 
 containers:
-  build-env:
+  build-env-client-app:
     image: node:12.10.0-alpine
     volumes:
       - local: ./app
-        container: /app
+        container: /code
         options: cached
-    working_directory: /app
+    working_directory: /code
+
+  build-env-server:
+    image: node:12.10.0-alpine
+    volumes:
+      - local: ./server
+        container: /code
+        options: cached
+    working_directory: /code
 
   heroku:
     build_directory: ./heroku
@@ -55,6 +63,14 @@ containers:
         container: /app
         options: cached
 
+  express-backend:
+    build_directory: ./server
+    dockerfile: ./Dockerfile
+    volumes:
+      - local: ./server
+        container: /code
+        options: cached
+    working_directory: /code
 
 tasks:
   setup-terraform-remote:
@@ -103,12 +119,19 @@ tasks:
       container: terraform
       command: sh -c 'terraform destroy -var web_app_name="$WEB_APP"'
 
-  build:
+  build-client-app:
     description: Build the web assets
-    group: Deploy
+    group: Build
     run:
-      container: build-env
+      container: build-env-client-app
       command: sh -c 'yarn && yarn build'
+
+  build-server:
+    description: Build the backend server
+    group: Build
+    run:
+      container: build-env-server
+      command: sh -c 'yarn'
 
   push-image:
     description: Dockerise and push the image to Heroku.
@@ -128,7 +151,7 @@ tasks:
     description: Start the application.
     group: Local
     prerequisites:
-      - build
+      - build-client-app
     run:
       container: nginx-serving-assets
       environment:
@@ -136,3 +159,16 @@ tasks:
       ports:
         - local: 4567
           container: 4567
+
+  local-server:
+    description: Start just the backend
+    group: Local
+    prerequisites:
+      - build-server
+    run:
+     container: express-backend
+     environment:
+       PORT: "3000"
+     ports:
+       - local: 3000
+         container: 3000
